@@ -18,7 +18,13 @@ app.get('/user/login', (req, res) => {
 });
 
 app.get('/user', userAuth, (req, res) => {
+  throw new Error('Something went wrong!');
   res.send('this is the user profile page');
+});
+
+app.use('/', (err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send('Something broke!');
 });
 
 app.listen(3000, () => {

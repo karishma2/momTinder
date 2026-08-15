@@ -1,9 +1,0 @@
-const mongoose = require('mongoose');
-
-const connectDb = async () => {
-  await mongoose.connect(
-    'mongodb+srv://dubekarishmaa_db_user:WSJufY7pVokSSyBk@karishmamongo.t1iuhfm.mongodb.net/momTinderDB'
-  );
-};
-
-module.exports = connectDb;

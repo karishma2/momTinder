@@ -7,30 +7,6 @@ const app = express();
 
 app.use(express.json());
 
-// app.use('/admin', adminAuth);
-
-// app.get('/admin/getAllData', (req, res) => {
-//   res.send('Getting all data for admin');
-// });
-
-// app.get('/admin/deleteAnyUserData', (req, res) => {
-//   res.send('Deleting a user data for admin');
-// });
-
-// app.get('/user/login', (req, res) => {
-//   res.send('logging in user.No auth needed');
-// });
-
-// app.get('/user', userAuth, (req, res) => {
-//   throw new Error('Something went wrong!');
-//   res.send('this is the user profile page');
-// });
-
-// app.use('/', (err, req, res, next) => {
-//   console.error(err.stack);
-//   res.status(500).send('Something broke!');
-// });
-
 app.get('/user', async (req, res) => {
   try {
     const user = await User.find({ email: req.body.email });
@@ -57,11 +33,72 @@ app.get('/feed', async (req, res) => {
 
 app.post('/signUp', async (req, res) => {
   console.log('Request body:', req.body);
+  const MandatoryFields = ['firstName', 'email', 'password'];
+  const AllowedOptionalFields = [
+    'lastName',
+    'interests',
+    'phone',
+    'bio',
+    'languages',
+    'city',
+    'area',
+    'numberOfChildren',
+    'childrenAgeGroups',
+    'profilePhoto',
+  ];
+
+  // Combine mandatory and optional fields into allowed fields
+  const AllowedFields = [...MandatoryFields, ...AllowedOptionalFields];
+
+  // Get request body keys
+  const requestBodyKeys = Object.keys(req.body);
+
+  // Check if all mandatory fields are present
+  const missingMandatoryFields = MandatoryFields.filter(
+    (field) => !req.body.hasOwnProperty(field) || req.body[field] === ''
+  );
+
+  if (req.body.interests.length > 5) {
+    return res.status(400).send('You cannot have more than 5 interests');
+  }
+  if (missingMandatoryFields.length > 0) {
+    return res
+      .status(400)
+      .send(`Missing mandatory fields: ${missingMandatoryFields.join(', ')}`);
+  }
+
+  // Check if there are any extra fields not in allowed list
+  const extraFields = requestBodyKeys.filter(
+    (field) => !AllowedFields.includes(field)
+  );
+
+  if (extraFields.length > 0) {
+    return res
+      .status(400)
+      .send(`Invalid fields in request body: ${extraFields.join(', ')}`);
+  }
+
   const userObj = new User(req.body);
   try {
     await userObj.save();
-    res.send('Creating a new user');
+    res.status(201).send('User created successfully');
   } catch (err) {
+    if (err.name === 'ValidationError') {
+      const errorMessages = Object.values(err.errors).map((e) => e.message);
+      return res
+        .status(400)
+        .send(`Validation error: ${errorMessages.join(', ')}`);
+    }
+
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern)[0];
+      return res
+        .status(400)
+        .send(
+          `${field.charAt(0).toUpperCase() + field.slice(1)} already exists. Please use a different value.`
+        );
+    }
+
     console.error(err);
     res.status(500).send('Error creating user');
   }
@@ -74,7 +111,7 @@ app.delete('/deleteUser', async (req, res) => {
     if (result.deletedCount === 0) {
       res.status(404).send('User not found');
     } else {
-      await res.send('User deleted successfully');
+      res.status(200).send('User deleted successfully');
     }
   } catch (err) {
     console.error(err);
@@ -82,21 +119,45 @@ app.delete('/deleteUser', async (req, res) => {
   }
 });
 
-app.patch('/updateUser', async (req, res) => {
+app.patch('/updateUser/:userId', async (req, res) => {
   try {
-    console.log('Request body:', req.body);
-    const result = await User.updateOne(
-      { email: req.body.email },
-      { $set: req.body }
+    const userId = req.params.userId;
+    if (!userId) {
+      return res.status(400).send('User ID is required');
+    }
+
+    // Validate MongoDB ObjectId format (24 hex characters)
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).send('Invalid user ID format');
+    }
+
+    const LockedFields = ['email'];
+    const isLockedFieldPresent = Object.keys(req.body).some((field) =>
+      LockedFields.includes(field)
     );
+    if (isLockedFieldPresent) {
+      return res
+        .status(400)
+        .send(`Cannot update locked fields: ${LockedFields.join(', ')}`);
+    }
+    if (req.body.interests.length > 5) {
+      return res.status(400).send('You cannot have more than 5 interests');
+    }
+    const result = await User.updateOne({ _id: userId }, { $set: req.body });
     if (result.matchedCount === 0) {
       res.status(404).send('User not found');
     } else {
-      await res.send('User updated successfully');
+      res.status(200).send('User updated successfully');
     }
   } catch (err) {
+    if (err.name === 'ValidationError') {
+      const errorMessages = Object.values(err.errors).map((e) => e.message);
+      return res
+        .status(400)
+        .send(`Validation error: ${errorMessages.join(', ')}`);
+    }
     console.error(err);
-    res.status(500).send('Error updating user');
+    res.status(500).send('Error updating user' + err.message);
   }
 });
 

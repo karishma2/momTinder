@@ -1,11 +1,16 @@
 const express = require('express');
 const connectDb = require('./config/connectionDB');
-const adminAuth = require('./middlewares/adminAuth.js');
-const userAuth = require('./middlewares/userAuth.js');
 const User = require('./models/User.js');
 const app = express();
+const bcrypt = require('bcrypt');
+const validator = require('validator');
+const { validateSignUpData } = require('./utils/validation.js');
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
+const userAuth = require('./middlewares/userAuth.js');
 
 app.use(express.json());
+app.use(cookieParser());
 
 app.get('/user', async (req, res) => {
   try {
@@ -32,57 +37,24 @@ app.get('/feed', async (req, res) => {
 });
 
 app.post('/signUp', async (req, res) => {
-  console.log('Request body:', req.body);
-  const MandatoryFields = ['firstName', 'email', 'password'];
-  const AllowedOptionalFields = [
-    'lastName',
-    'interests',
-    'phone',
-    'bio',
-    'languages',
-    'city',
-    'area',
-    'numberOfChildren',
-    'childrenAgeGroups',
-    'profilePhoto',
-  ];
-
-  // Combine mandatory and optional fields into allowed fields
-  const AllowedFields = [...MandatoryFields, ...AllowedOptionalFields];
-
-  // Get request body keys
-  const requestBodyKeys = Object.keys(req.body);
-
-  // Check if all mandatory fields are present
-  const missingMandatoryFields = MandatoryFields.filter(
-    (field) => !req.body.hasOwnProperty(field) || req.body[field] === ''
-  );
-
-  if (req.body.interests.length > 5) {
-    return res.status(400).send('You cannot have more than 5 interests');
-  }
-  if (missingMandatoryFields.length > 0) {
-    return res
-      .status(400)
-      .send(`Missing mandatory fields: ${missingMandatoryFields.join(', ')}`);
-  }
-
-  // Check if there are any extra fields not in allowed list
-  const extraFields = requestBodyKeys.filter(
-    (field) => !AllowedFields.includes(field)
-  );
-
-  if (extraFields.length > 0) {
-    return res
-      .status(400)
-      .send(`Invalid fields in request body: ${extraFields.join(', ')}`);
-  }
-
-  const userObj = new User(req.body);
   try {
+    validateSignUpData(req);
+    const { firstName, lastName, email, password } = req.body;
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const userObj = new User({
+      firstName,
+      lastName,
+      email,
+      password: passwordHash,
+    });
     await userObj.save();
     res.status(201).send('User created successfully');
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+
     if (err.name === 'ValidationError') {
       const errorMessages = Object.values(err.errors).map((e) => e.message);
       return res
@@ -104,9 +76,49 @@ app.post('/signUp', async (req, res) => {
   }
 });
 
+app.get('/profile', userAuth, async (req, res) => {
+  try {
+    res.send('user profile: ' + req.user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error retrieving profile');
+  }
+});
+
+app.post('/sentConnectionRequest', userAuth, async (req, res) => {
+  try {
+    res.send(req.user.firstName + ' sent connection request');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error retrieving profile');
+  }
+});
+
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!validator.isEmail(email)) {
+      throw new Error('invalid credential');
+    }
+    const user = await User.findOne({ email: email });
+    const token = jwt.sign({ _id: user.id }, 'XYZ123', { expiresIn: '8h' });
+    const isValidUser = await bcrypt.compare(password, user.password);
+    if (isValidUser) {
+      res.cookie('token', token, {
+        expires: new Date(Date.now() + 8 * 3600000),
+      });
+      res.send('login successful');
+    } else {
+      throw new Error('invalid credential');
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Invalid credential');
+  }
+});
+
 app.delete('/deleteUser', async (req, res) => {
   try {
-    console.log('Request body:', req.body);
     const result = await User.deleteOne({ email: req.body.email });
     if (result.deletedCount === 0) {
       res.status(404).send('User not found');

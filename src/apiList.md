@@ -58,13 +58,3 @@ All routers are mounted at `/` in `app.js`, so the endpoints below do not have a
 | ------ | ------------------------- | ------------------------------------------------------------ | ---- |
 | `GET`  | `/user/requests/received` | Get incoming interested requests, with sender profiles       | Yes  |
 | `GET`  | `/user/connections`       | Get accepted connections, returning the other user's profile | Yes  |
-
-## app-level APIs
-
-| Method   | Endpoint                 | Purpose                                     | Auth |
-| -------- | ------------------------ | ------------------------------------------- | ---- |
-| `GET`    | `/user`                  | Find users by the email in the request body | No   |
-| `GET`    | `/feed`                  | Get all users                               | No   |
-| `POST`   | `/sentConnectionRequest` | Test connection-request response            | Yes  |
-| `DELETE` | `/deleteUser`            | Delete a user by email in the request body  | No   |
-| `PATCH`  | `/updateUser/:userId`    | Update a user by ID                         | No   |

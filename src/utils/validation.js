@@ -16,4 +16,13 @@ const validateSignUpData = (req) => {
   }
 };
 
-module.exports = { validateSignUpData };
+const validateUpdateProfileData = (req) => {
+  const LockedFields = ['email', 'password'];
+  const updateFields = Object.keys(req.body);
+  const isLockedFieldPresent = updateFields.some((field) =>
+    LockedFields.includes(field)
+  );
+  return !isLockedFieldPresent;
+};
+
+module.exports = { validateSignUpData, validateUpdateProfileData };
